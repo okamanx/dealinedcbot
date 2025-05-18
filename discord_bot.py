@@ -3,18 +3,57 @@ from discord.ext import commands
 import json
 import os
 from dotenv import load_dotenv
+import sys
+import logging
+import re
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger('discord_bot')
 
 # Load environment variables from .env file
 load_dotenv()
 
+def validate_token(token):
+    """Validate the Discord bot token format."""
+    if not token:
+        return False, "Token is empty"
+    
+    # Discord tokens typically follow this pattern: [a-zA-Z0-9_-]{23,28}\.[a-zA-Z0-9_-]{6,7}\.[a-zA-Z0-9_-]{27}
+    token_pattern = r'^[a-zA-Z0-9_-]{23,28}\.[a-zA-Z0-9_-]{6,7}\.[a-zA-Z0-9_-]{27}$'
+    if not re.match(token_pattern, token):
+        return False, "Token format is invalid"
+    
+    return True, "Token format is valid"
+
 # Get the bot token from environment variable
 TOKEN = os.getenv('DISCORD_BOT_TOKEN')
+logger.info("Checking Discord bot token...")
+
 if not TOKEN:
-    raise ValueError("No Discord bot token found. Please set DISCORD_BOT_TOKEN in your .env file.")
+    logger.error("DISCORD_BOT_TOKEN environment variable is not set!")
+    logger.error("Please set your Discord bot token in Render's environment variables.")
+    sys.exit(1)
+
+# Validate token format
+is_valid, message = validate_token(TOKEN)
+if not is_valid:
+    logger.error(f"Token validation failed: {message}")
+    logger.error("Please check your token in Render's environment variables.")
+    logger.error("Token should be obtained from Discord Developer Portal -> Your App -> Bot -> Reset Token")
+    sys.exit(1)
+
+logger.info("Token format validation passed")
+logger.info(f"Token length: {len(TOKEN)} characters")
+logger.info(f"Token format: {TOKEN[:10]}...{TOKEN[-10:]}")
 
 # Set up bot intents
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True  # Enable member intents
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # Constants
@@ -46,9 +85,11 @@ data = load_data()
 @bot.event
 async def on_ready():
     """Called when the bot is ready and connected to Discord."""
-    print(f"Bot logged in as {bot.user}")
-    print(f"Bot is in {len(bot.guilds)} guilds")
-    print("------")
+    logger.info(f"Bot logged in as {bot.user}")
+    logger.info(f"Bot is in {len(bot.guilds)} guilds")
+    for guild in bot.guilds:
+        logger.info(f"Connected to guild: {guild.name} (id: {guild.id})")
+    logger.info("------")
 
 @bot.command()
 @commands.has_permissions(administrator=True)
@@ -177,6 +218,26 @@ async def on_command_error(ctx, error):
     else:
         await ctx.send(f"An error occurred: {str(error)}")
 
-# Run the bot
+# Run the bot with error handling
 if __name__ == "__main__":
-    bot.run(TOKEN) 
+    try:
+        logger.info("Starting bot...")
+        logger.info("Attempting to connect to Discord...")
+        logger.info("Make sure the bot is invited to your server with proper permissions")
+        logger.info("You can get the invite link from Discord Developer Portal -> OAuth2 -> URL Generator")
+        bot.run(TOKEN, log_handler=None)  # Disable discord.py's default logging
+    except discord.LoginFailure as e:
+        logger.error(f"Failed to login to Discord: {str(e)}")
+        logger.error("This usually means the token is invalid or has been reset.")
+        logger.error("Please:")
+        logger.error("1. Go to Discord Developer Portal")
+        logger.error("2. Select your application")
+        logger.error("3. Go to Bot section")
+        logger.error("4. Click 'Reset Token'")
+        logger.error("5. Copy the new token")
+        logger.error("6. Update the token in Render's environment variables")
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"An unexpected error occurred: {str(e)}")
+        logger.error("Please check the logs for more details.")
+        sys.exit(1) 
