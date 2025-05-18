@@ -2,8 +2,24 @@ services:
   - type: web
     name: discord-tournament-bot
     env: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: |
+      pip install -r requirements.txt
+      echo "Checking environment variables..."
+      if [ -z "$DISCORD_BOT_TOKEN" ]; then
+        echo "Error: DISCORD_BOT_TOKEN is not set!"
+        exit 1
+      fi
     startCommand: python discord_bot.py
     envVars:
       - key: DISCORD_BOT_TOKEN
-        sync: false 
+        sync: false
+        required: true
+    healthCheckPath: /
+    autoDeploy: true
+    plan: free
+    env: python
+    numInstances: 1
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1 
